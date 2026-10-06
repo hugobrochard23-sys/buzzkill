@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#1b1020">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>BUZZ KILL</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <canvas id="c"></canvas>
+  <div id="vignette"></div>
+
+  <!-- HUD (en partie) -->
+  <div id="hud" class="hidden">
+    <div id="hScore">0</div>
+    <div id="hBar"><i id="hFill"></i><b id="hTime">30</b></div>
+    <div id="hCombo" class="hidden"><b id="hMult">x1</b><span id="hComboN">0</span></div>
+  </div>
+
+  <!-- ACCUEIL -->
+  <section id="home" class="screen">
+    <div class="topbar">
+      <div class="pill" id="coinPill">🪙 <b id="coins">0</b></div>
+      <button class="round" id="btnSettings" aria-label="Réglages">⚙️</button>
+    </div>
+    <div class="logo"><span class="l1">BUZZ</span><span class="l2">KILL</span><i class="logoFly">🪰</i></div>
+    <div id="eventBanner" class="banner hidden"></div>
+    <div class="spacer"></div>
+    <div class="stats">
+      <div class="lvl"><b id="lvlN">1</b><div class="xp"><i id="xpFill"></i></div></div>
+      <div class="best">RECORD <b id="bestScore">0</b></div>
+    </div>
+    <button id="btnPlay" class="play">PLAY</button>
+    <div class="chips">
+      <button class="chip" id="btnSwatter"><canvas id="swPrev" width="64" height="64"></canvas><span id="swName">Classique</span></button>
+      <button class="chip" id="btnEnv"><span id="envName">🍳 Cuisine</span></button>
+    </div>
+    <button id="btnDaily" class="daily"><span id="dailyTxt"></span><div class="xp"><i id="dailyFill"></i></div></button>
+  </section>
+
+  <!-- FIN DE PARTIE -->
+  <section id="over" class="screen hidden">
+    <div class="overCard">
+      <div id="ovRecord" class="record hidden">NOUVEAU RECORD !</div>
+      <div class="big"><b id="ovKills">0</b><span>MOUCHES</span></div>
+      <div class="grid3">
+        <div><b id="ovScore">0</b><span>score</span></div>
+        <div><b id="ovCombo">0</b><span>combo max</span></div>
+        <div><b id="ovAcc">0%</b><span>précision</span></div>
+      </div>
+      <div class="reward"><span>+<b id="ovCoins">0</b> 🪙</span><span id="ovLvl" class="hidden"></span></div>
+      <div id="ovMis"></div>
+    </div>
+    <div class="spacer"></div>
+    <button id="btnAgain" class="play">REJOUER</button>
+    <button id="btnDouble" class="ad">▶ DOUBLER 🪙 <small>(pub)</small></button>
+    <div class="row2">
+      <button class="chip small" id="btnShare">📤 Partager</button>
+      <button class="chip small" id="btnHome">🏠 Accueil</button>
+    </div>
+  </section>
+
+  <!-- MODALES -->
+  <section id="shop" class="screen modal hidden">
+    <div class="sheet"><h2>TAPETTES</h2><p class="sub">Cosmétique uniquement : aucune n'est plus forte.</p>
+      <div id="shopGrid" class="shopGrid"></div>
+      <button class="chip" data-close>Fermer</button></div>
+  </section>
+  <section id="missions" class="screen modal hidden">
+    <div class="sheet"><h2>DÉFIS DU JOUR</h2><div id="misList"></div><p class="sub" id="streakTxt"></p>
+      <button class="chip" data-close>Fermer</button></div>
+  </section>
+  <section id="settings" class="screen modal hidden">
+    <div class="sheet"><h2>RÉGLAGES</h2>
+      <button class="chip wide" id="tgSound"></button>
+      <button class="chip wide" id="tgHaptics"></button>
+      <button class="chip wide" id="btnConsent">🔒 Confidentialité & pubs</button>
+      <button class="chip wide" id="btnNoAds">🚫 Retirer les pubs — <span id="noAdsPrice"></span></button>
+      <p class="sub">Aucune donnée personnelle collectée. Pas de compte. Sauvegarde locale uniquement.</p>
+      <button class="chip" data-close>Fermer</button></div>
+  </section>
+  <section id="consent" class="screen modal hidden">
+    <div class="sheet"><h2>TES DONNÉES</h2>
+      <p>Les pubs financent le jeu. Tu choisis : pubs adaptées à tes centres d'intérêt (identifiant publicitaire), ou pubs génériques sans suivi. Le jeu fonctionne pareil dans les deux cas. Modifiable à tout moment dans les réglages.</p>
+      <button class="play small" id="cAccept">ACCEPTER</button>
+      <button class="chip wide" id="cRefuse">Pubs non personnalisées</button>
+      <p class="sub">Jeu tout public : aucune pub personnalisée n'est affichée aux moins de 16 ans. <a href="privacy.html" target="_blank">Politique de confidentialité</a></p></div>
+  </section>
+  <section id="cont" class="screen modal hidden">
+    <div class="sheet"><h2>ENCORE 10 SECONDES ?</h2>
+      <p>Ton combo est en feu. Continue ta partie.</p>
+      <button class="play small" id="cYes">▶ +10 s <small>(pub)</small></button>
+      <button class="chip wide" id="cNo">Non merci</button></div>
+  </section>
+
+  <div id="tuto" class="hidden"><div id="tutoTxt">Écrase-la.</div></div>
+  <div id="adov" class="hidden"><div class="adbox"><b>PUBLICITÉ (simulée)</b><p>Emplacement du SDK publicitaire.</p><div id="adCount">3</div><button class="chip" id="adClose" disabled>Fermer</button></div></div>
+  <div id="toast" class="hidden"></div>
+</div>
+<script src="js/config.js"></script>
+<script src="js/save.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/services.js"></script>
+<script src="js/game.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
