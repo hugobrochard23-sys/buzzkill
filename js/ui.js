@@ -69,18 +69,27 @@ const UI = (() => {
     show('hud'); Game.startRound(); Analytics.log('round');
   }
   Game.ev.onTutoDone = () => { D.tuto = true; Save.save(); hide('tuto'); show('hud'); Game.setEnv(D.env); Game.startRound(); };
+  // HUD : on n'écrit dans le DOM que si la valeur change (appelé à chaque frame)
+  const H = { score: -1, time: -1, pct: -1, cls: null, combo: -1, mult: 0, heat: -1 };
   Game.ev.onHud = (starting, pop) => {
     if (starting === true) { show('hud'); }
-    $('hScore').textContent = S.score;
+    if (H.score !== S.score) { H.score = S.score; $('hScore').textContent = S.score; }
     if (pop) { $('hScore').classList.add('pop'); setTimeout(() => $('hScore').classList.remove('pop'), 80); }
-    const pct = Math.max(0, Math.min(1, S.timeLeft / S.timeMax)) * 100, f = $('hFill');
-    f.style.width = pct + '%'; f.className = S.timeLeft <= 5 ? 'crit' : S.timeLeft <= 10 ? 'warn' : '';
-    $('hTime').textContent = Math.ceil(S.timeLeft);
-    const hc = $('hCombo'); hc.classList.toggle('hidden', S.combo < 2);
-    if (S.combo >= 2) {
-      const mt = Math.min(10, 1 + Math.floor(S.combo / 5)); const old = $('hMult').textContent;
-      $('hMult').textContent = 'x' + mt; $('hComboN').textContent = S.combo + ' combo';
-      if (old !== 'x' + mt) { hc.classList.remove('pop'); void hc.offsetWidth; hc.classList.add('pop'); }
+    const pct = Math.round(Math.max(0, Math.min(1, S.timeLeft / S.timeMax)) * 100);
+    if (H.pct !== pct) { H.pct = pct; $('hFill').style.width = pct + '%'; }
+    const cls = S.timeLeft <= 5 ? 'crit' : S.timeLeft <= 10 ? 'warn' : '';
+    if (H.cls !== cls) { H.cls = cls; $('hFill').className = cls; }
+    const t = Math.ceil(S.timeLeft); if (H.time !== t) { H.time = t; $('hTime').textContent = t; }
+    if (H.combo !== S.combo) {
+      H.combo = S.combo; const hc = $('hCombo'); hc.classList.toggle('hidden', S.combo < 2);
+      if (S.combo >= 2) {
+        const mt = Math.min(10, 1 + Math.floor(S.combo / 5));
+        $('hComboN').textContent = S.combo + ' combo';
+        if (H.mult !== mt) { H.mult = mt; $('hMult').textContent = 'x' + mt; hc.classList.remove('pop'); void hc.offsetWidth; hc.classList.add('pop'); }
+      } else H.mult = 0;
+      // Chaleur du combo : le bord de l'écran s'embrase de plus en plus
+      const heat = S.combo >= 50 ? 3 : S.combo >= 25 ? 2 : S.combo >= 10 ? 1 : 0;
+      if (H.heat !== heat) { H.heat = heat; $('vignette').style.boxShadow = heat ? `inset 0 0 ${60 + heat * 40}px ${heat * 6}px rgba(255,${150 - heat * 40},40,${.25 + heat * .15})` : 'none'; }
     }
   };
   Game.ev.onAskContinue = () => {

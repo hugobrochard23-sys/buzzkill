@@ -3,12 +3,12 @@
 const Game = (() => {
   const cv = document.getElementById('c'), ctx = cv.getContext('2d');
   let W = 0, H = 0, dpr = 1, bg, stain, curtain;
-  const MAX_PARTS = 220;
+  let MAX_PARTS = 220, lowfx = false, fontFam = 'sans-serif', ftAvg = 16, ftN = 0;
   const S = {
     mode: 'idle',            // idle | tuto | play | ending | over
     env: ENVS.kitchen, t: 0, elapsed: 0, timeLeft: 0, timeMax: CFG.roundTime,
     score: 0, combo: 0, maxCombo: 0, kills: 0, taps: 0, hits: 0, golden: 0, bees: 0, boss: false,
-    flies: [], parts: [], texts: [], swats: [], chain: [],
+    flies: [], parts: [], texts: [], swats: [], chain: [], splats: [],
     shake: 0, freeze: 0, ts: 1, tsT: 0, flash: 0, flashCol: '#f33', zoom: 0,
     spawnCd: 0, waves: 0, idleCd: 0, usedContinue: false, lastTick: 0, event: null,
   };
@@ -72,7 +72,7 @@ const Game = (() => {
   // ---------- Flux de jeu ----------
   function reset(mode) {
     Object.assign(S, { mode, t: 0, elapsed: 0, timeLeft: CFG.roundTime, timeMax: CFG.roundTime, score: 0, combo: 0, maxCombo: 0, kills: 0, taps: 0, hits: 0,
-      golden: 0, bees: 0, boss: false, flies: [], parts: [], texts: [], swats: [], chain: [], shake: 0, freeze: 0, ts: 1, flash: 0, spawnCd: .5, waves: 0, usedContinue: false, lastTick: 99 });
+      golden: 0, bees: 0, boss: false, flies: [], parts: [], texts: [], swats: [], chain: [], splats: [], shake: 0, freeze: 0, ts: 1, flash: 0, spawnCd: .5, waves: 0, usedContinue: false, lastTick: 99 });
     stain.getContext('2d').clearRect(0, 0, W, H);
   }
   function setEnv(id) { S.env = ENVS[id] || ENVS.kitchen; buildEnv(); }
@@ -152,11 +152,12 @@ const Game = (() => {
   function onTap(x, y) {
     Sfx.unlock();
     if (S.mode === 'over' || S.mode === 'ending') return;
-    Sfx.tap(); S.swats.push({ x, y, t: 0 });
+    Sfx.tap(); S.swats.push({ x, y, t: 0 }); S.swats.push({ x, y, t: 0, ring: true, small: true });
     let best = null, bd = 1e9;
     for (const f of S.flies) {
       if (!tappable(f)) continue;
-      const d = Math.hypot(f.x - x, f.y - y) - f.r;
+      // Le doigt vise où la mouche ÉTAIT : on teste aussi sa position projetée (latence tactile ~50 ms)
+      const d = Math.min(Math.hypot(f.x - x, f.y - y), Math.hypot(f.x + f.vx * .05 - x, f.y + f.vy * .05 - y)) - f.r;
       if (d < CFG.hitSlop && d < bd) { bd = d; best = f; }
     }
     if (S.mode === 'play') S.taps++;
@@ -166,6 +167,7 @@ const Game = (() => {
   }
   function missTap(x, y) {
     Hap.miss(); Sfx.miss();
+    if (S.combo >= 5) Sfx.comboBreak();
     if (S.combo >= 3) text(x, y - 30, 'RATÉ', '#ff6b5e', 30);
     S.combo = 0; S.timeLeft -= CFG.missPenalty; S.shake = Math.max(S.shake, 3); S.flash = .22; S.flashCol = '#ff3b3b'; hud(true);
   }
@@ -193,13 +195,13 @@ const Game = (() => {
     const m = mult(), pts = sp.pts * m;
     if (S.mode !== 'idle') S.score += pts;
     S.kills++; f.dead = true;
-    stainAt(f.x, f.y, sp.stain, f.r);
+    S.splats.push({ x: f.x, y: f.y, c: sp.stain, r: f.r, t: 0 });   // tache qui « claque » avant de sécher dans le décor
     const big = f.type === 'boss' || f.type === 'golden' || f.type === 'bomb';
     burst(f.x, f.y, big ? 22 : 12, sp.stain, big ? 380 : 260);
     text(f.x, f.y - 6, S.mode === 'idle' ? 'SPLAT!' : `+${pts}`, f.type === 'golden' ? '#ffc933' : '#fff', 30 + Math.min(m, 10) * 2);
     Sfx.splat(S.combo);
     if (S.combo > 1) Sfx.combo(Math.min(S.combo, 15));
-    S.shake = Math.max(S.shake, 4 + Math.min(S.combo, 20) * .25); S.freeze = chained ? 0 : .035;
+    S.shake = Math.max(S.shake, 4 + Math.min(S.combo, 20) * .25); S.freeze = chained ? 0 : .03 + Math.min(S.combo, 30) * .0016; S.zoom = Math.max(S.zoom, .35);
     if (S.combo >= 25) Hap.combo(); else Hap.hit();
     if (S.mode === 'tuto') { Sfx.milestone(); Hap.big(); S.shake = 14; S.freeze = .12; setTimeout(() => ev.onTutoDone && ev.onTutoDone(), 900); return; }
     if (S.mode === 'play') {
@@ -217,15 +219,16 @@ const Game = (() => {
   }
   function beeHit(f) {
     f.dead = true; S.bees++; S.combo = 0; S.timeLeft -= 2; S.flash = .4; S.flashCol = '#ff3b3b'; S.shake = 10;
-    stainAt(f.x, f.y, '#ff4b3e', f.r); burst(f.x, f.y, 10, '#ff4b3e', 260);
+    S.splats.push({ x: f.x, y: f.y, c: '#ff4b3e', r: f.r, t: 0 }); burst(f.x, f.y, 10, '#ff4b3e', 260);
     text(f.x, f.y - 20, 'ABEILLE ! -2s', '#ff6b5e', 34); Sfx.bad(); Hap.bad(); hud(true);
   }
 
   // ---------- Effets ----------
   function burst(x, y, n, color, speed) {
+    if (lowfx) n = Math.ceil(n / 2);
     for (let i = 0; i < n && S.parts.length < MAX_PARTS; i++) {
       const a = rnd(0, 6.28), s = rnd(.3, 1) * speed;
-      S.parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 40, life: rnd(.35, .7), max: .7, r: rnd(3, 7), c: Math.random() < .25 ? '#fff' : color });
+      S.parts.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 40, life: rnd(.35, .7), max: .7, r: rnd(3, 7), c: Math.random() < .25 ? '#fff' : color, drop: !lowfx && Math.random() < .3 });
     }
   }
   function text(x, y, s, c, size) { if (S.texts.length < 24) S.texts.push({ x, y, s, c, size, t: 0 }); }
@@ -247,7 +250,7 @@ const Game = (() => {
     S.t += dt;
     if (S.mode === 'play') {
       S.elapsed += dt; S.timeLeft -= dt;
-      const alive = S.flies.filter(f => !f.leaving || !f.out).length;
+      let alive = 0; for (const f of S.flies) if (!f.leaving || !f.out) alive++;
       S.spawnCd -= dt;
       if (S.spawnCd <= 0 && alive < targetAlive() + (S.boss ? 1 : 0)) { spawn(pickType(), false); S.spawnCd = rnd(.35, .8); }
       const lvl = Save.level();
@@ -263,11 +266,13 @@ const Game = (() => {
     }
     for (const f of S.flies) updateFly(f, dt);
     // fuites : combo cassé (sauf dorée/abeille : pas de pénalité)
-    for (const f of S.flies) if (f.leaving && f.out && !f.dead) { f.dead = true; if (S.mode === 'play' && f.type !== 'bee' && f.type !== 'golden' && S.combo > 0) { if (S.combo >= 3) text(clamp(f.x, 60, W - 60), clamp(f.y, 120, H - 60), 'ÉCHAPPÉE', '#ffb199', 24); S.combo = 0; hud(true); } }
+    for (const f of S.flies) if (f.leaving && f.out && !f.dead) { f.dead = true; if (S.mode === 'play' && f.type !== 'bee' && f.type !== 'golden' && S.combo > 0) { if (S.combo >= 5) Sfx.comboBreak(); if (S.combo >= 3) text(clamp(f.x, 60, W - 60), clamp(f.y, 120, H - 60), 'ÉCHAPPÉE', '#ffb199', 24); S.combo = 0; hud(true); } }
     for (const c of S.chain) { c.t -= dt; if (c.t <= 0 && !c.f.dead) { c.f.hp = 0; kill(c.f, true); } }
-    S.chain = S.chain.filter(c => c.t > 0);
-    S.flies = S.flies.filter(f => !f.dead);
+    compact(S.chain, c => c.t > 0);
+    compact(S.flies, f => !f.dead);
   }
+  // Filtre sur place : évite de réallouer un tableau à chaque frame (GC = micro-saccades sur mobile)
+  function compact(a, keep) { let j = 0; for (let i = 0; i < a.length; i++) if (keep(a[i])) a[j++] = a[i]; a.length = j; }
   function endRound() {
     S.mode = 'ending';
     if (!S.usedContinue && S.score > 0 && ev.onAskContinue) { ev.onAskContinue(); return; }
@@ -288,14 +293,25 @@ const Game = (() => {
     let dt = raw * S.ts;
     if (S.freeze > 0) { S.freeze -= raw; dt = 0; }
     if (S.mode !== 'ending') update(dt);
-    for (const p of S.parts) { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 600 * dt; p.vx *= .98; }
-    S.parts = S.parts.filter(p => p.life > 0);
+    for (const p of S.parts) { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 600 * dt; p.vx *= .98; if (p.life <= 0 && p.drop) dropStain(p); }
+    compact(S.parts, p => p.life > 0);
     for (const t of S.texts) { t.t += dt; t.y -= 45 * dt; }
-    S.texts = S.texts.filter(t => t.t < .9);
+    compact(S.texts, t => t.t < .9);
     for (const s of S.swats) s.t += raw;
-    S.swats = S.swats.filter(s => s.t < .26);
+    compact(S.swats, s => s.t < .26);
+    for (const sp of S.splats) { sp.t += raw; if (sp.t >= .12) stainAt(sp.x, sp.y, sp.c, sp.r); }
+    compact(S.splats, sp => sp.t < .12);
+    adapt(raw);
     S.shake *= Math.pow(.003, raw); S.flash = Math.max(0, S.flash - raw); S.zoom = Math.max(0, S.zoom - raw * 4);
     draw();
+  }
+
+  function dropStain(p) { if (p.x < 0 || p.x > W || p.y < 0 || p.y > H) return; const g = stain.getContext('2d'); g.globalAlpha = .75; g.fillStyle = p.c; g.beginPath(); g.arc(p.x, p.y, p.r * .6, 0, 7); g.fill(); g.globalAlpha = 1; }
+  // Qualité adaptative : si la moyenne glisse sous ~45 FPS, on allège les effets (jamais le gameplay)
+  function adapt(raw) {
+    ftAvg += (raw * 1000 - ftAvg) * .05;
+    if (++ftN % 60) return;
+    const slow = ftAvg > 22; if (slow !== lowfx) { lowfx = slow; MAX_PARTS = slow ? 90 : 220; }
   }
 
   // ---------- Rendu ----------
@@ -306,22 +322,27 @@ const Game = (() => {
     const sx = (Math.random() - .5) * S.shake, sy = (Math.random() - .5) * S.shake, z = 1 + S.zoom * .03;
     ctx.translate(W / 2 + sx, H / 2 + sy); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2);
     ctx.drawImage(bg, 0, 0, W, H); ctx.drawImage(stain, 0, 0, W, H);
+    for (const sp of S.splats) {   // overshoot : la tache gicle puis se stabilise
+      const k = sp.t / .12, sc = k < .5 ? .5 + k * 1.6 : 1.3 - (k - .5) * .6; ctx.globalAlpha = .85; ctx.fillStyle = sp.c;
+      ctx.beginPath(); ctx.ellipse(sp.x, sp.y, sp.r * 1.1 * sc, sp.r * .95 * sc, 0, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
     for (const f of S.flies) drawFly(f);
     if (S.env.hide && S.mode !== 'tuto') ctx.drawImage(curtain, 0, 0, W, H);
-    for (const p of S.parts) { ctx.globalAlpha = Math.min(1, p.life * 3); ctx.fillStyle = p.c; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill(); }
+    for (const p of S.parts) { ctx.globalAlpha = Math.min(1, p.life * 3); ctx.fillStyle = p.c; ctx.fillRect(p.x - p.r, p.y - p.r, p.r * 2, p.r * 2); }
     ctx.globalAlpha = 1;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
     for (const t of S.texts) {
       const k = t.t / .9, sc = k < .15 ? .6 + k * 3 : 1;
-      ctx.globalAlpha = 1 - Math.max(0, k - .6) / .4; ctx.font = `900 ${t.size * sc}px ${getComputedStyle(document.body).fontFamily}`;
+      ctx.globalAlpha = 1 - Math.max(0, k - .6) / .4; ctx.font = `900 ${t.size * sc | 0}px ${fontFam}`;
       ctx.lineWidth = 6; ctx.strokeStyle = INK; ctx.strokeText(t.s, t.x, t.y); ctx.fillStyle = t.c; ctx.fillText(t.s, t.x, t.y);
     }
     ctx.globalAlpha = 1;
     const sk = SWATTERS.find(s => s.id === Save.d.sw) || SWATTERS[0];
     for (const s of S.swats) {
-      if (s.ring) { const k = s.t / .26; ctx.strokeStyle = '#ffb347'; ctx.lineWidth = 10 * (1 - k); ctx.beginPath(); ctx.arc(s.x, s.y, 20 + k * 130, 0, 7); ctx.stroke(); continue; }
-      const k = s.t / .26, strike = Math.min(1, s.t / .06);
-      drawSwatter(ctx, sk, s.x, s.y, 1 + (1 - strike) * .6, -.5 * (1 - strike), k > .6 ? 1 - (k - .6) / .4 : 1, true);
+      if (s.ring) { const k = s.t / .26; ctx.strokeStyle = s.small ? 'rgba(255,255,255,.8)' : '#ffb347'; ctx.lineWidth = (s.small ? 4 : 10) * (1 - k); ctx.beginPath(); ctx.arc(s.x, s.y, s.small ? 8 + k * 40 : 20 + k * 130, 0, 7); ctx.stroke(); continue; }
+      const k = s.t / .26, strike = Math.min(1, s.t / .045), rebound = s.t > .045 && s.t < .12 ? Math.sin((s.t - .045) / .075 * 3.14) * .08 : 0;
+      drawSwatter(ctx, sk, s.x, s.y, 1 + (1 - strike) * .8 - rebound, -.6 * (1 - strike), k > .6 ? 1 - (k - .6) / .4 : 1, true);
     }
     ctx.restore();
     if (S.flash > 0) { ctx.globalAlpha = S.flash * .5; ctx.fillStyle = S.flashCol; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
@@ -375,6 +396,7 @@ const Game = (() => {
   }
 
   function init() {
+    fontFam = getComputedStyle(document.body).fontFamily;
     window.addEventListener('resize', resize); resize();
     cv.addEventListener('pointerdown', e => { e.preventDefault(); const r = cv.getBoundingClientRect(); onTap(e.clientX - r.left, e.clientY - r.top); });
     requestAnimationFrame(loop);

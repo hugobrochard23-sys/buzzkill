@@ -41,6 +41,7 @@ const Sfx = (() => {
     splat(c = 0) { const k = Math.min(c, 24); noise(0.14, 700 + k * 40, 0.5, 'bandpass'); tone(220 + k * 9, 0.13, 'triangle', 0.35, -150); tone(90, 0.12, 'sine', 0.5, -50); },
     clang() { tone(900, 0.12, 'square', 0.18, -300); noise(0.05, 5000, 0.2, 'highpass'); },
     miss()  { tone(190, 0.16, 'sawtooth', 0.14, -90); },
+    comboBreak() { tone(440, .25, 'triangle', .22, -300); tone(330, .3, 'sine', .15, -200, .08); },
     bad()   { tone(110, 0.3, 'sawtooth', 0.3, -50); tone(116, 0.3, 'square', 0.15, -50); },
     combo(step) { tone(note(step), 0.16, 'triangle', 0.3); tone(note(step) * 2, 0.2, 'sine', 0.15, 0, 0.04); },
     milestone() { [0, 2, 4, 7].forEach((n, i) => tone(note(n + 5), 0.22, 'square', 0.14, 0, i * 0.06)); },
